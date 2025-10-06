@@ -144,6 +144,7 @@ const FileAccess = ({ shortCode }) => {
                 src={file.base64Data}
                 className="w-full h-full border-0 rounded-lg"
                 title={file.originalName}
+                type="application/pdf"
               />
             </div>
           )}

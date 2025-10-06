@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, FileText, Image, Link, Download, Eye, Files, X, Cloud, Copy, CheckCircle, BarChart3, Settings, Users, Globe, TrendingUp, Calendar, Filter, Search, Grid, List, Plus, Share2, Lock, Clock, Trash2, Edit3, Star, AlertCircle, Zap, Database, Shield } from 'lucide-react';
+import { Upload, FileText, Image, Link, Download, Eye, Files, X, Cloud, Copy, CheckCircle, BarChart3, Settings, Users, Globe, TrendingUp, Calendar, Filter, Search, Grid, List, Plus, Share2, Lock, Clock, Trash2, Edit3, Star, AlertCircle, Zap, Database, Shield, QrCode } from 'lucide-react';
+import QRCode from 'qrcode';
 import { uploadFile } from '../utils/api';
 import { getUserFiles } from '../services/fileService';
 
@@ -14,6 +15,7 @@ const Dashboard = ({ onNavigate }) => {
   const [filterType, setFilterType] = useState('all');
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [qrCodes, setQrCodes] = useState({});
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -151,6 +153,31 @@ const Dashboard = ({ onNavigate }) => {
     navigator.clipboard.writeText(text);
     setCopiedId(fileId);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const generateQRCode = async (url, fileId) => {
+    try {
+      const qrDataUrl = await QRCode.toDataURL(url, {
+        width: 200,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+      setQrCodes(prev => ({ ...prev, [fileId]: qrDataUrl }));
+    } catch (error) {
+      console.error('Error generating QR code:', error);
+    }
+  };
+
+  const downloadQRCode = (qrDataUrl, fileName) => {
+    const link = document.createElement('a');
+    link.href = qrDataUrl;
+    link.download = `QR_${fileName}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const removeFile = (index) => {
@@ -372,6 +399,13 @@ const Dashboard = ({ onNavigate }) => {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => generateQRCode(`${window.location.origin}/f/${file.shortCode}`, file.id)}
+                      className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
+                      title="Generate QR Code"
+                    >
+                      <QrCode className="w-4 h-4" />
+                    </button>
                     <button className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors">
                       <Edit3 className="w-4 h-4" />
                     </button>
@@ -381,23 +415,41 @@ const Dashboard = ({ onNavigate }) => {
                   </div>
                 </div>
                 
-                <div className={`flex items-center gap-3 ${viewMode === 'list' ? 'min-w-0' : ''}`}>
-                  <input
-                    type="text"
-                    value={`https://dropbeam.com/f/${file.shortCode}`}
-                    readOnly
-                    className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono"
-                  />
-                  <button 
-                    onClick={() => copyToClipboard(`${window.location.origin}/f/${file.shortCode}`, file.id)} 
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-medium"
-                  >
-                    {copiedId === file.id ? (
-                      <><CheckCircle className="w-4 h-4" /> Copied!</>
-                    ) : (
-                      <><Copy className="w-4 h-4" /> Copy</>
-                    )}
-                  </button>
+                <div className={`space-y-3 ${viewMode === 'list' ? 'min-w-0' : ''}`}>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      value={`https://dropbeam.com/f/${file.shortCode}`}
+                      readOnly
+                      className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono"
+                    />
+                    <button 
+                      onClick={() => copyToClipboard(`${window.location.origin}/f/${file.shortCode}`, file.id)} 
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-medium"
+                    >
+                      {copiedId === file.id ? (
+                        <><CheckCircle className="w-4 h-4" /> Copied!</>
+                      ) : (
+                        <><Copy className="w-4 h-4" /> Copy</>
+                      )}
+                    </button>
+                  </div>
+                  
+                  {qrCodes[file.id] && (
+                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                      <img src={qrCodes[file.id]} alt="QR Code" className="w-16 h-16" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-700">QR Code Generated</p>
+                        <p className="text-xs text-gray-500">Scan to access file</p>
+                      </div>
+                      <button
+                        onClick={() => downloadQRCode(qrCodes[file.id], file.originalName)}
+                        className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 transition-colors"
+                      >
+                        Download QR
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
