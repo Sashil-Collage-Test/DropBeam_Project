@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /shared_files/{document} {
+      allow read, write: if true;
+    }
+    match /file_chunks/{document} {
+      allow read, write: if true;
+    }
+  }
+}
