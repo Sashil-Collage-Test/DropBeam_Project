@@ -3,6 +3,7 @@ import { Upload, FileText, Image, Link, Download, Eye, Files, X, Cloud, Copy, Ch
 import QRCode from 'qrcode';
 import { uploadFile } from '../utils/api';
 import { getUserFiles } from '../services/fileService';
+import PinSetup from './PinSetup';
 
 const Dashboard = ({ onNavigate }) => {
   const [files, setFiles] = useState([]);
@@ -16,6 +17,9 @@ const Dashboard = ({ onNavigate }) => {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [qrCodes, setQrCodes] = useState({});
+  const [showPinSetup, setShowPinSetup] = useState(false);
+  const [currentFile, setCurrentFile] = useState(null);
+  const [pendingFiles, setPendingFiles] = useState([]);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -111,12 +115,12 @@ const Dashboard = ({ onNavigate }) => {
     return <FileText className="w-6 h-6 text-red-500" />;
   };
 
-  const handleRealUpload = async (file) => {
+  const handleRealUpload = async (file, pin = null) => {
     try {
       setUploadProgress(prev => ({ ...prev, [file.name]: 10 }));
       
       setUploadProgress(prev => ({ ...prev, [file.name]: 50 }));
-      const result = await uploadFile(file);
+      const result = await uploadFile(file, { pin });
       
       setUploadProgress(prev => ({ ...prev, [file.name]: 100 }));
       
@@ -143,10 +147,27 @@ const Dashboard = ({ onNavigate }) => {
   const handleUpload = async () => {
     if (files.length === 0) return;
     
-    for (const file of files) {
-      await handleRealUpload(file);
+    // Show PIN setup for first file
+    if (files.length > 0) {
+      setCurrentFile(files[0]);
+      setPendingFiles(files.slice(1));
+      setShowPinSetup(true);
     }
-    setFiles([]);
+  };
+
+  const handlePinSet = async (pin) => {
+    if (currentFile) {
+      await handleRealUpload(currentFile, pin);
+      
+      // Process remaining files with same PIN
+      for (const file of pendingFiles) {
+        await handleRealUpload(file, pin);
+      }
+      
+      setFiles([]);
+      setCurrentFile(null);
+      setPendingFiles([]);
+    }
   };
 
   const copyToClipboard = (text, fileId) => {
@@ -767,6 +788,17 @@ const Dashboard = ({ onNavigate }) => {
           </div>
         </div>
       </div>
+      
+      <PinSetup
+        isOpen={showPinSetup}
+        onClose={() => {
+          setShowPinSetup(false);
+          setCurrentFile(null);
+          setPendingFiles([]);
+        }}
+        onSetPin={handlePinSet}
+        fileName={currentFile?.name}
+      />
     </div>
   );
 };

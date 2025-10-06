@@ -2,16 +2,16 @@ import { createShortUrl, verifyFilePin } from '../services/shortUrl';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-export const uploadFile = async (file, pin = null, expiryHours = 24) => {
+export const uploadFile = async (file, options = {}) => {
   try {
     console.log('API uploadFile called with:', file.name, file.size);
     
-    const options = {
-      pin,
-      expiryHours: expiryHours || 24
+    const uploadOptions = {
+      pin: options.pin || null,
+      expiryHours: options.expiryHours || 24
     };
     
-    const result = await createShortUrl(file, options);
+    const result = await createShortUrl(file, uploadOptions);
     
     return {
       shortCode: result.shortCode,
