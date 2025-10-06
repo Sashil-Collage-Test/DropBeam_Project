@@ -8,12 +8,12 @@ const isDemoMode = process.env.REACT_APP_USE_DEMO_MODE === 'true';
 // Firebase configuration
 const firebaseConfig = isDemoMode ? {
   // Demo configuration - uses localStorage for data
-  apiKey: 'demo-key',
-  authDomain: 'demo.firebaseapp.com',
-  projectId: 'demo-project',
-  storageBucket: 'demo.appspot.com',
-  messagingSenderId: '123456789',
-  appId: 'demo-app-id'
+  apiKey: process.env.REACT_APP_DEMO_API_KEY || 'demo-key',
+  authDomain: process.env.REACT_APP_DEMO_AUTH_DOMAIN || 'demo.firebaseapp.com',
+  projectId: process.env.REACT_APP_DEMO_PROJECT_ID || 'demo-project',
+  storageBucket: process.env.REACT_APP_DEMO_STORAGE_BUCKET || 'demo.appspot.com',
+  messagingSenderId: process.env.REACT_APP_DEMO_MESSAGING_SENDER_ID || '123456789',
+  appId: process.env.REACT_APP_DEMO_APP_ID || 'demo-app-id'
 } : {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
@@ -39,7 +39,9 @@ if (process.env.NODE_ENV === 'development' && process.env.REACT_APP_USE_EMULATOR
     connectFirestoreEmulator(db, 'localhost', 8080);
     connectStorageEmulator(storage, 'localhost', 9199);
   } catch (error) {
-    console.log('Emulators already connected or not available');
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Firebase emulators connection failed:', error.message);
+    }
   }
 }
 

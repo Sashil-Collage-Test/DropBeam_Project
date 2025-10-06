@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, query, where, doc, updateDoc, increment } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc, increment, deleteDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 const generateShortCode = () => {
@@ -8,6 +8,16 @@ const generateShortCode = () => {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
+};
+
+const getExpiryTime = (expiry) => {
+  switch (expiry) {
+    case '1h': return 60 * 60 * 1000;
+    case '24h': return 24 * 60 * 60 * 1000;
+    case '15d': return 15 * 24 * 60 * 60 * 1000;
+    case '30d': return 30 * 24 * 60 * 60 * 1000;
+    default: return 30 * 24 * 60 * 60 * 1000;
+  }
 };
 
 const fileToBase64 = (file) => {
@@ -39,9 +49,9 @@ const storeFileChunks = async (shortCode, file, base64Data) => {
     fileType: file.type,
     totalChunks,
     createdAt: new Date(),
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    hasPin: false,
-    pin: null,
+    expiresAt: new Date(Date.now() + getExpiryTime(options.expiry || '30d')),
+    hasPin: !!options.pin,
+    pin: options.pin || null,
     views: 0,
     downloads: 0,
     isChunked: totalChunks > 1
@@ -91,7 +101,7 @@ export const createShortUrl = async (file, options = {}) => {
         fileType: file.type,
         base64Data,
         createdAt: new Date(),
-        expiresAt: new Date(Date.now() + (options.expiryHours || 24) * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + getExpiryTime(options.expiry || '30d')),
         hasPin: !!options.pin,
         pin: options.pin || null,
         views: 0,
@@ -194,6 +204,28 @@ export const verifyFilePin = async (shortCode, pin) => {
     return { success: false, error: 'Invalid PIN' };
   } catch (error) {
     return { success: false, error: error.message };
+  }
+};
+
+export const deleteFile = async (fileId) => {
+  try {
+    // Delete main file document
+    await deleteDoc(doc(db, 'shared_files', fileId));
+    
+    // Delete associated chunks if any
+    const chunksRef = collection(db, 'file_chunks');
+    const q = query(chunksRef, where('parentId', '==', fileId));
+    const querySnapshot = await getDocs(q);
+    
+    const deletePromises = querySnapshot.docs.map(chunkDoc => 
+      deleteDoc(doc(db, 'file_chunks', chunkDoc.id))
+    );
+    
+    await Promise.all(deletePromises);
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    throw error;
   }
 };
 

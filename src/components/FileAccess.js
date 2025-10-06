@@ -22,6 +22,7 @@ const FileAccess = ({ shortCode }) => {
         setFile(fileData);
       } else {
         setFile(fileData);
+        // View will be incremented only once when file is accessed
         await incrementViews(fileData.id);
       }
     } catch (err) {
@@ -36,6 +37,7 @@ const FileAccess = ({ shortCode }) => {
       const result = await verifyFilePin(shortCode, pin);
       if (result.success) {
         setNeedsPin(false);
+        // Only increment views once after PIN verification
         await incrementViews(file.id);
       } else {
         alert('Invalid PIN');

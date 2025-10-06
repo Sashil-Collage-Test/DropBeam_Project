@@ -5,6 +5,7 @@ const PinSetup = ({ isOpen, onClose, onSetPin, fileName }) => {
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [error, setError] = useState('');
+  const [expiryOption, setExpiryOption] = useState('30d');
 
   const handlePinChange = (value, isConfirm = false) => {
     const numericValue = value.replace(/\D/g, '').slice(0, 6);
@@ -25,12 +26,12 @@ const PinSetup = ({ isOpen, onClose, onSetPin, fileName }) => {
       setError('PINs do not match');
       return;
     }
-    onSetPin(pin);
+    onSetPin({ pin, expiry: expiryOption });
     onClose();
   };
 
   const handleSkip = () => {
-    onSetPin(null);
+    onSetPin({ pin: null, expiry: expiryOption });
     onClose();
   };
 
@@ -89,6 +90,22 @@ const PinSetup = ({ isOpen, onClose, onSetPin, fileName }) => {
                 maxLength={6}
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Link Expiry
+            </label>
+            <select
+              value={expiryOption}
+              onChange={(e) => setExpiryOption(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="1h">1 Hour</option>
+              <option value="24h">24 Hours</option>
+              <option value="15d">15 Days</option>
+              <option value="30d">30 Days</option>
+            </select>
           </div>
 
           {error && (

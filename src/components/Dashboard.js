@@ -3,7 +3,9 @@ import { Upload, FileText, Image, Link, Download, Eye, Files, X, Cloud, Copy, Ch
 import QRCode from 'qrcode';
 import { uploadFile } from '../utils/api';
 import { getUserFiles } from '../services/fileService';
+import { deleteFile } from '../services/shortUrl';
 import PinSetup from './PinSetup';
+import NetworkSetup from './NetworkSetup';
 
 const Dashboard = ({ onNavigate }) => {
   const [files, setFiles] = useState([]);
@@ -20,6 +22,22 @@ const Dashboard = ({ onNavigate }) => {
   const [showPinSetup, setShowPinSetup] = useState(false);
   const [currentFile, setCurrentFile] = useState(null);
   const [pendingFiles, setPendingFiles] = useState([]);
+  const [showNetworkSetup, setShowNetworkSetup] = useState(false);
+  const [networkIP, setNetworkIP] = useState(() => {
+    const encryptedIP = localStorage.getItem('dropbeam_network_ip');
+    if (encryptedIP) {
+      try {
+        const decrypted = atob(encryptedIP);
+        if (decrypted.endsWith('_dropbeam_secure')) {
+          return decrypted.replace('_dropbeam_secure', '');
+        }
+      } catch (error) {
+        console.warn('Invalid stored IP, clearing');
+        localStorage.removeItem('dropbeam_network_ip');
+      }
+    }
+    return null;
+  });
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -115,12 +133,12 @@ const Dashboard = ({ onNavigate }) => {
     return <FileText className="w-6 h-6 text-red-500" />;
   };
 
-  const handleRealUpload = async (file, pin = null) => {
+  const handleRealUpload = async (file, pin = null, expiry = '30d') => {
     try {
       setUploadProgress(prev => ({ ...prev, [file.name]: 10 }));
       
       setUploadProgress(prev => ({ ...prev, [file.name]: 50 }));
-      const result = await uploadFile(file, { pin });
+      const result = await uploadFile(file, { pin, expiry });
       
       setUploadProgress(prev => ({ ...prev, [file.name]: 100 }));
       
@@ -155,13 +173,13 @@ const Dashboard = ({ onNavigate }) => {
     }
   };
 
-  const handlePinSet = async (pin) => {
+  const handlePinSet = async (options) => {
     if (currentFile) {
-      await handleRealUpload(currentFile, pin);
+      await handleRealUpload(currentFile, options.pin, options.expiry);
       
-      // Process remaining files with same PIN
+      // Process remaining files with same PIN and expiry
       for (const file of pendingFiles) {
-        await handleRealUpload(file, pin);
+        await handleRealUpload(file, options.pin, options.expiry);
       }
       
       setFiles([]);
@@ -178,7 +196,16 @@ const Dashboard = ({ onNavigate }) => {
 
   const generateQRCode = async (url, fileId) => {
     try {
-      const qrDataUrl = await QRCode.toDataURL(url, {
+      // Check if network IP is set, if not show setup modal
+      if (!networkIP) {
+        setShowNetworkSetup(true);
+        return;
+      }
+      
+      // Replace localhost with saved network IP
+      const networkUrl = url.replace(/localhost|127\.0\.0\.1/, networkIP);
+      
+      const qrDataUrl = await QRCode.toDataURL(networkUrl, {
         width: 200,
         margin: 2,
         color: {
@@ -192,6 +219,30 @@ const Dashboard = ({ onNavigate }) => {
     }
   };
 
+  const handleNetworkIPSet = (ip) => {
+    // Validate IP again for security
+    const isValidPrivateIP = (ip) => {
+      const parts = ip.split('.').map(Number);
+      if (parts.length !== 4 || parts.some(part => isNaN(part) || part < 0 || part > 255)) {
+        return false;
+      }
+      const [a, b] = parts;
+      return (
+        (a === 192 && b === 168) ||
+        (a === 10) ||
+        (a === 172 && b >= 16 && b <= 31)
+      );
+    };
+    
+    if (isValidPrivateIP(ip)) {
+      setNetworkIP(ip);
+      // Regenerate any existing QR codes with new IP
+      setQrCodes({});
+    } else {
+      alert('Invalid IP address received');
+    }
+  };
+
   const downloadQRCode = (qrDataUrl, fileName) => {
     const link = document.createElement('a');
     link.href = qrDataUrl;
@@ -199,6 +250,17 @@ const Dashboard = ({ onNavigate }) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleDeleteFile = async (fileId) => {
+    if (window.confirm('Are you sure you want to delete this file?')) {
+      try {
+        await deleteFile(fileId);
+        loadFiles();
+      } catch (error) {
+        alert('Failed to delete file: ' + error.message);
+      }
+    }
   };
 
   const removeFile = (index) => {
@@ -423,14 +485,18 @@ const Dashboard = ({ onNavigate }) => {
                     <button 
                       onClick={() => generateQRCode(`${window.location.origin}/f/${file.shortCode}`, file.id)}
                       className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
-                      title="Generate QR Code"
+                      title={networkIP ? 'Generate QR Code' : 'Setup Network IP for QR Code'}
                     >
                       <QrCode className="w-4 h-4" />
                     </button>
                     <button className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors">
                       <Edit3 className="w-4 h-4" />
                     </button>
-                    <button className="text-gray-400 hover:text-red-600 p-1 rounded transition-colors">
+                    <button 
+                      onClick={() => handleDeleteFile(file.id)}
+                      className="text-gray-400 hover:text-red-600 p-1 rounded transition-colors"
+                      title="Delete File"
+                    >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -617,24 +683,37 @@ const Dashboard = ({ onNavigate }) => {
       <div className="bg-white rounded-xl shadow-lg p-6">
         <h3 className="text-xl font-bold text-gray-900 mb-6">Storage by File Type</h3>
         <div className="space-y-4">
-          {['Images', 'PDFs', 'Others'].map((type, index) => {
-            const percentage = [65, 30, 5][index];
-            const color = ['blue', 'red', 'gray'][index];
-            return (
-              <div key={type} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-4 h-4 bg-${color}-500 rounded`}></div>
-                  <span className="font-medium">{type}</span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="w-32 bg-gray-200 rounded-full h-2">
-                    <div className={`bg-${color}-500 h-2 rounded-full`} style={{ width: `${percentage}%` }}></div>
+          {(() => {
+            const totalSize = realFiles.reduce((sum, file) => sum + (file.fileSize || 0), 0);
+            const imageSize = realFiles.filter(f => f.originalName.match(/\.(jpg|jpeg|png|gif|webp)$/i)).reduce((sum, file) => sum + (file.fileSize || 0), 0);
+            const pdfSize = realFiles.filter(f => f.originalName.match(/\.pdf$/i)).reduce((sum, file) => sum + (file.fileSize || 0), 0);
+            const otherSize = totalSize - imageSize - pdfSize;
+            
+            const types = [
+              { name: 'Images', size: imageSize, color: 'blue' },
+              { name: 'PDFs', size: pdfSize, color: 'red' },
+              { name: 'Others', size: otherSize, color: 'gray' }
+            ];
+            
+            return types.map((type) => {
+              const percentage = totalSize > 0 ? Math.round((type.size / totalSize) * 100) : 0;
+              return (
+                <div key={type.name} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-4 h-4 bg-${type.color}-500 rounded`}></div>
+                    <span className="font-medium">{type.name}</span>
                   </div>
-                  <span className="text-sm text-gray-500 w-12">{percentage}%</span>
+                  <div className="flex items-center gap-4">
+                    <div className="w-32 bg-gray-200 rounded-full h-2">
+                      <div className={`bg-${type.color}-500 h-2 rounded-full`} style={{ width: `${percentage}%` }}></div>
+                    </div>
+                    <span className="text-sm text-gray-500 w-12">{percentage}%</span>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()
+          }
         </div>
       </div>
     </div>
@@ -662,9 +741,9 @@ const Dashboard = ({ onNavigate }) => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium text-gray-700">Enable file expiry</p>
-                  <p className="text-sm text-gray-500">Files will be automatically deleted after 30 days</p>
+                  <p className="text-sm text-gray-500">Short links will expire after 30 days</p>
                 </div>
-                <input type="checkbox" className="w-5 h-5 text-blue-600 rounded" />
+                <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-600 rounded" />
               </div>
             </div>
           </div>
@@ -798,6 +877,12 @@ const Dashboard = ({ onNavigate }) => {
         }}
         onSetPin={handlePinSet}
         fileName={currentFile?.name}
+      />
+      
+      <NetworkSetup
+        isOpen={showNetworkSetup}
+        onClose={() => setShowNetworkSetup(false)}
+        onSetIP={handleNetworkIPSet}
       />
     </div>
   );
