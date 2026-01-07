@@ -23,21 +23,8 @@ const Dashboard = ({ onNavigate }) => {
   const [currentFile, setCurrentFile] = useState(null);
   const [pendingFiles, setPendingFiles] = useState([]);
   const [showNetworkSetup, setShowNetworkSetup] = useState(false);
-  const [networkIP, setNetworkIP] = useState(() => {
-    const encryptedIP = localStorage.getItem('dropbeam_network_ip');
-    if (encryptedIP) {
-      try {
-        const decrypted = atob(encryptedIP);
-        if (decrypted.endsWith('_dropbeam_secure')) {
-          return decrypted.replace('_dropbeam_secure', '');
-        }
-      } catch (error) {
-        console.warn('Invalid stored IP, clearing');
-        localStorage.removeItem('dropbeam_network_ip');
-      }
-    }
-    return null;
-  });
+  const [currentFileForQR, setCurrentFileForQR] = useState(null);
+  const [fileNetworkIPs, setFileNetworkIPs] = useState({});
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -196,14 +183,15 @@ const Dashboard = ({ onNavigate }) => {
 
   const generateQRCode = async (url, fileId) => {
     try {
-      // Check if network IP is set, if not show setup modal
-      if (!networkIP) {
+      // Check if IP is set for this file, if not show setup modal
+      if (!fileNetworkIPs[fileId]) {
+        setCurrentFileForQR(fileId);
         setShowNetworkSetup(true);
         return;
       }
       
-      // Replace localhost with saved network IP
-      const networkUrl = url.replace(/localhost|127\.0\.0\.1/, networkIP);
+      // Replace localhost with file-specific network IP
+      const networkUrl = url.replace(/localhost|127\.0\.0\.1/, fileNetworkIPs[fileId]);
       
       const qrDataUrl = await QRCode.toDataURL(networkUrl, {
         width: 200,
@@ -234,10 +222,9 @@ const Dashboard = ({ onNavigate }) => {
       );
     };
     
-    if (isValidPrivateIP(ip)) {
-      setNetworkIP(ip);
-      // Regenerate any existing QR codes with new IP
-      setQrCodes({});
+    if (isValidPrivateIP(ip) && currentFileForQR) {
+      setFileNetworkIPs(prev => ({ ...prev, [currentFileForQR]: ip }));
+      setCurrentFileForQR(null);
     } else {
       alert('Invalid IP address received');
     }
@@ -485,7 +472,7 @@ const Dashboard = ({ onNavigate }) => {
                     <button 
                       onClick={() => generateQRCode(`${window.location.origin}/f/${file.shortCode}`, file.id)}
                       className="text-gray-400 hover:text-blue-600 p-1 rounded transition-colors"
-                      title={networkIP ? 'Generate QR Code' : 'Setup Network IP for QR Code'}
+                      title={fileNetworkIPs[file.id] ? 'Generate QR Code' : 'Setup Network IP for QR Code'}
                     >
                       <QrCode className="w-4 h-4" />
                     </button>
@@ -881,7 +868,10 @@ const Dashboard = ({ onNavigate }) => {
       
       <NetworkSetup
         isOpen={showNetworkSetup}
-        onClose={() => setShowNetworkSetup(false)}
+        onClose={() => {
+          setShowNetworkSetup(false);
+          setCurrentFileForQR(null);
+        }}
         onSetIP={handleNetworkIPSet}
       />
     </div>
